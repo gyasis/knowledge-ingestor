@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or Discussion
+    url: https://github.com/gyasis/knowledge-ingestor/discussions
+    about: Ask questions or discuss ideas about the Knowledge Ingestor project
+  - name: Security Issue
+    url: https://github.com/gyasis/knowledge-ingestor/security
+    about: Please report security vulnerabilities privately
+  - name: Documentation
+    url: https://github.com/gyasis/knowledge-ingestor/blob/main/README.md
+    about: Check the documentation for setup and usage instructions

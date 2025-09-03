@@ -1,0 +1,78 @@
+# Knowledge Ingestor Configuration Example
+# Copy this file to config.yaml and customize as needed
+
+database:
+  backend: deeplake
+  dataset_path: "./data/deeplake_dataset"
+  read_only: false
+  timeout: 30
+  pool_size: 10
+  options:
+    # DeepLake specific options
+    token: null  # Use ACTIVELOOP_TOKEN environment variable
+    verbose: false
+
+openai:
+  # API key from environment variable OPENAI_API_KEY
+  model: "gpt-3.5-turbo"
+  embedding_model: "text-embedding-ada-002"
+  max_tokens: 1500
+  temperature: 0.3
+  timeout: 60
+
+processing:
+  chunk_size: 1000
+  chunk_overlap: 200
+  max_concurrent_requests: 5
+  retry_attempts: 3
+  retry_delay: 1.0
+  enable_async: true
+  temp_dir: "./temp"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/knowledge-ingestor.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+  enable_colors: true
+
+plugins:
+  enabled_ingestors:
+    - "web"
+    - "pdf"
+    - "arxiv"
+    - "youtube"
+  enabled_databases:
+    - "deeplake"
+  plugin_paths: []
+  auto_discover: true
+
+# Plugin-specific configurations
+plugin_configs:
+  web:
+    timeout: 30
+    max_content_length: 1000000
+    user_agent: "Mozilla/5.0 (compatible; KnowledgeIngestor/0.1.0)"
+    enable_javascript: false
+  
+  pdf:
+    max_pages: 100
+    extract_images: false
+    ocr_fallback: true
+  
+  arxiv:
+    max_papers: 10
+    include_references: true
+    download_pdf: false
+  
+  youtube:
+    quality: "best"
+    extract_audio: true
+    subtitle_languages: ["en"]
+  
+  deeplake:
+    # Additional DeepLake configuration
+    compute: "cpu"  # or "gpu"
+    create_if_not_exists: true
+    overwrite: false

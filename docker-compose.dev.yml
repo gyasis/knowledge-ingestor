@@ -1,0 +1,341 @@
+# Knowledge Ingestor - Development Docker Compose Configuration
+# Optimized for development with hot reloading, debugging, and minimal services
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Development Application Services
+  # =============================================================================
+  
+  # Main FastAPI application with hot reloading
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: knowledge-ingestor:dev
+    container_name: knowledge-ingestor-api-dev
+    restart: unless-stopped
+    environment:
+      # Core configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-deeplake}
+      - DATABASE_CONNECTION=${DATABASE_CONNECTION:-/app/data/deeplake_dataset}
+      
+      # Development settings
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - LOG_FILE=/app/logs/api-dev.log
+      - DEVELOPMENT=true
+      
+      # Performance settings (relaxed for dev)
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-5}
+      - CHUNK_SIZE=${CHUNK_SIZE:-500}
+      - WORKER_TIMEOUT=${WORKER_TIMEOUT:-60}
+      
+      # Database connections
+      - REDIS_URL=redis://redis-dev:6379/0
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-ingestor}:${POSTGRES_PASSWORD:-devpassword}@postgres-dev:5432/${POSTGRES_DB:-knowledge_ingestor_dev}
+      
+      # Security (development keys - not for production)
+      - JWT_SECRET_KEY=dev-secret-key-not-for-production
+      - API_KEY_SALT=dev-salt
+      
+      # CORS settings (permissive for development)
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:8080,http://localhost:8000
+      - CORS_ALLOW_CREDENTIALS=true
+      
+      # Hot reloading
+      - PYTHONPATH=/app/src
+      - WATCHFILES_FORCE_POLLING=true
+      
+    volumes:
+      # Source code mounting for hot reloading
+      - ./src:/app/src:rw
+      - ./configs:/app/configs:rw
+      - ./tests:/app/tests:rw
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      
+      # Data volumes
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
+      - dev_temp:/app/temp
+      - dev_cache:/app/cache
+      
+    ports:
+      - "${DEV_API_PORT:-8000}:8000"
+      - "${DEV_DEBUG_PORT:-5678}:5678"  # Debug port for VS Code/PyCharm
+      
+    networks:
+      - knowledge-dev-net
+      
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+      postgres-dev:
+        condition: service_healthy
+        
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 2
+      start_period: 10s
+      
+    # Development command with hot reloading and debug support
+    command: >
+      sh -c "
+        echo 'Starting development server with hot reloading...' &&
+        uvicorn knowledge_ingestor.api.app:app 
+        --host 0.0.0.0 
+        --port 8000 
+        --reload 
+        --reload-dir /app/src 
+        --reload-include '*.py' 
+        --log-level debug
+        --access-log
+      "
+
+  # Development worker (optional, can be disabled)
+  worker-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: knowledge-ingestor:dev
+    container_name: knowledge-ingestor-worker-dev
+    restart: unless-stopped
+    environment:
+      # Inherit development settings
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-deeplake}
+      - DATABASE_CONNECTION=${DATABASE_CONNECTION:-/app/data/deeplake_dataset}
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - LOG_FILE=/app/logs/worker-dev.log
+      
+      # Worker-specific settings (reduced for development)
+      - REDIS_URL=redis://redis-dev:6379/0
+      - WORKER_CONCURRENCY=2
+      - WORKER_PREFETCH=1
+      - WORKER_MAX_MEMORY=512M
+      
+      # Database connections
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-ingestor}:${POSTGRES_PASSWORD:-devpassword}@postgres-dev:5432/${POSTGRES_DB:-knowledge_ingestor_dev}
+      
+    volumes:
+      - ./src:/app/src:rw
+      - ./configs:/app/configs:rw
+      - ./data:/app/data:rw
+      - ./logs:/app/logs:rw
+      - worker_dev_temp:/app/temp
+      - worker_dev_cache:/app/cache
+      
+    networks:
+      - knowledge-dev-net
+      
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+      postgres-dev:
+        condition: service_healthy
+        
+    profiles:
+      - worker
+      
+    command: >
+      sh -c "
+        echo 'Starting development worker...' &&
+        python -m knowledge_ingestor.worker --debug
+      "
+
+  # =============================================================================
+  # Development Infrastructure Services
+  # =============================================================================
+  
+  # Redis for development (minimal configuration)
+  redis-dev:
+    image: redis:7.2-alpine
+    container_name: knowledge-ingestor-redis-dev
+    restart: unless-stopped
+    command: >
+      redis-server 
+      --appendonly yes 
+      --maxmemory 128mb 
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+    volumes:
+      - redis_dev_data:/data
+    ports:
+      - "${DEV_REDIS_PORT:-6380}:6379"
+    networks:
+      - knowledge-dev-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # PostgreSQL for development
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: knowledge-ingestor-postgres-dev
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-knowledge_ingestor_dev}
+      - POSTGRES_USER=${POSTGRES_USER:-ingestor}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-devpassword}
+      - POSTGRES_INITDB_ARGS=--auth-host=trust
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DEV_POSTGRES_PORT:-5433}:5432"
+    networks:
+      - knowledge-dev-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ingestor} -d ${POSTGRES_DB:-knowledge_ingestor_dev}"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # =============================================================================
+  # Development Tools and Utilities
+  # =============================================================================
+  
+  # Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: knowledge-ingestor-adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    networks:
+      - knowledge-dev-net
+    depends_on:
+      - postgres-dev
+    profiles:
+      - tools
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: knowledge-ingestor-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis-dev:6379
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    networks:
+      - knowledge-dev-net
+    depends_on:
+      - redis-dev
+    profiles:
+      - tools
+
+  # Jupyter for data analysis and experimentation
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: knowledge-ingestor:dev
+    container_name: knowledge-ingestor-jupyter
+    restart: unless-stopped
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-dev-token}
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src:rw
+      - ./notebooks:/app/notebooks:rw
+      - ./data:/app/data:rw
+      - ./configs:/app/configs:ro
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    networks:
+      - knowledge-dev-net
+    depends_on:
+      - redis-dev
+      - postgres-dev
+    profiles:
+      - jupyter
+    command: >
+      sh -c "
+        pip install jupyter jupyterlab ipywidgets &&
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+      "
+
+  # =============================================================================
+  # Testing and Development Services
+  # =============================================================================
+  
+  # Test runner service
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: knowledge-ingestor:dev
+    container_name: knowledge-ingestor-test-runner
+    restart: "no"
+    environment:
+      - PYTHONPATH=/app/src
+      - ENVIRONMENT=test
+      - DATABASE_CONNECTION=/app/data/test_deeplake_dataset
+      - REDIS_URL=redis://redis-dev:6379/1  # Different DB for tests
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-ingestor}:${POSTGRES_PASSWORD:-devpassword}@postgres-dev:5432/${POSTGRES_DB:-knowledge_ingestor_test}
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./data:/app/data:rw
+      - test_reports:/app/reports
+    networks:
+      - knowledge-dev-net
+    depends_on:
+      - redis-dev
+      - postgres-dev
+    profiles:
+      - test
+    command: >
+      sh -c "
+        echo 'Running tests...' &&
+        python -m pytest tests/ -v --cov=src/knowledge_ingestor --cov-report=html:/app/reports/coverage --cov-report=term
+      "
+
+# =============================================================================
+# Development Volumes
+# =============================================================================
+volumes:
+  redis_dev_data:
+    driver: local
+  postgres_dev_data:
+    driver: local
+  dev_temp:
+    driver: local
+  dev_cache:
+    driver: local
+  worker_dev_temp:
+    driver: local
+  worker_dev_cache:
+    driver: local
+  test_reports:
+    driver: local
+
+# =============================================================================
+# Development Network
+# =============================================================================
+networks:
+  knowledge-dev-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: knowledge-dev-br0

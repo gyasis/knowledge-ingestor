@@ -1,0 +1,191 @@
+[project]
+name = "knowledge-ingestor"
+version = "0.1.0"
+description = "A modular document ingestion and storage system with DeepLake vector database support"
+readme = "README.md"
+authors = [
+    { name = "gyasis", email = "gyasis@gmail.com" }
+]
+keywords = ["document-processing", "vector-database", "deeplake", "embeddings"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.9"
+dependencies = [
+    # Core Dependencies
+    "numpy<2.0.0",  # Required for PyTorch compatibility
+    "deeplake",
+    "openai",
+    "langchain",
+    "langchain-community",
+    "python-dotenv",
+    
+    # Web Scraping and Content Processing
+    "beautifulsoup4",
+    "requests",
+    "newspaper3k",
+    "html2text",
+    "html2markdown",
+    "medium-api",
+    "tiktoken",
+    "crawl4ai",
+    "weasyprint",
+    
+    # PDF Processing
+    "pymupdf4llm",
+    "PyMuPDF",
+    
+    # Logging and Utilities
+    "colorlog",
+    "python-dateutil",
+    "tqdm",
+    
+    # Async Support
+    "aiohttp",
+    
+    # LLM and Guidance
+    "guidance",
+    "torch",  # Required for guidance dependency
+    
+    # Text Processing
+    "unstructured",
+    "chardet",
+    
+    # CLI Dependencies
+    "click",
+    "rich",
+    "pyyaml",
+    
+    # ArXiv Processing
+    "arxiv",
+    
+    # YouTube and Video Processing
+    # "youtube-subtitles-processor",  # Custom package - not in PyPI
+    "yt-dlp",  # YouTube download functionality
+    "opencv-python",  # OpenCV for video processing
+    "pytesseract",  # OCR for video frames
+    "Pillow",  # Image processing
+    "nltk",  # Natural language processing
+    
+    # Advanced LLM Libraries
+    "dspy-ai",
+    "litellm",
+    "tenacity",  # Retry logic
+    
+    # Audio/Video Processing
+    # "voxstruct",  # Custom speech processing (commented out - not in PyPI)
+    
+    # Rich CLI Features
+    "pyperclip",  # Clipboard operations
+    
+    # FastAPI for REST API
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    
+    # HTTP Client
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pytest-xdist",  # Parallel test execution
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "pre-commit",
+    "bandit",  # Security linting
+    "safety",  # Dependency security check
+    "ruff",  # Fast Python linter
+    "coverage",  # Code coverage
+    "httpx",  # For testing HTTP clients
+    "faker",  # Generate test data
+    "factory-boy",  # Test data factory
+]
+test = [
+    "pytest",
+    "pytest-cov", 
+    "pytest-asyncio",
+    "pytest-mock",
+]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
+
+[project.scripts]
+knowledge-ingestor = "knowledge_ingestor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/knowledge-ingestor"
+Documentation = "https://your-org.github.io/knowledge-ingestor/"
+Repository = "https://github.com/your-org/knowledge-ingestor"
+Issues = "https://github.com/your-org/knowledge-ingestor/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/knowledge_ingestor"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["knowledge_ingestor"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=src/knowledge_ingestor",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--strict-markers",
+    "-v",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]

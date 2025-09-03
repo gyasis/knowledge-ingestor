@@ -1,0 +1,366 @@
+# Knowledge Ingestor - Production Docker Compose Configuration
+# Multi-service orchestration with full monitoring and production features
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Core Application Services
+  # =============================================================================
+  
+  # Main FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: knowledge-ingestor:latest
+    container_name: knowledge-ingestor-api
+    restart: unless-stopped
+    environment:
+      # Core configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-deeplake}
+      - DATABASE_CONNECTION=${DATABASE_CONNECTION:-/app/data/deeplake_dataset}
+      
+      # Logging configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=/app/logs/api.log
+      
+      # Performance settings
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-10}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1000}
+      - WORKER_TIMEOUT=${WORKER_TIMEOUT:-300}
+      
+      # Database connections
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-ingestor}:${POSTGRES_PASSWORD:-secure_password}@postgres:5432/${POSTGRES_DB:-knowledge_ingestor}
+      
+      # Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - API_KEY_SALT=${API_KEY_SALT:-your-api-key-salt}
+      
+      # Application settings
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      
+      # Monitoring
+      - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-true}
+      - PROMETHEUS_PORT=9090
+      
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./configs:/app/configs
+      - api_temp:/app/temp
+      - api_cache:/app/cache
+    ports:
+      - "${API_PORT:-8000}:8000"
+      - "${PROMETHEUS_PORT:-9090}:9090"  # Metrics endpoint
+    networks:
+      - knowledge-net
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 1G
+          cpus: "0.5"
+
+  # Background worker for processing tasks
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    image: knowledge-ingestor:worker
+    container_name: knowledge-ingestor-worker
+    restart: unless-stopped
+    environment:
+      # Inherit most settings from API
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-deeplake}
+      - DATABASE_CONNECTION=${DATABASE_CONNECTION:-/app/data/deeplake_dataset}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=/app/logs/worker.log
+      
+      # Worker-specific settings
+      - REDIS_URL=redis://redis:6379/0
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-4}
+      - WORKER_PREFETCH=${WORKER_PREFETCH:-1}
+      - WORKER_MAX_MEMORY=${WORKER_MAX_MEMORY:-1G}
+      
+      # Database connections
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-ingestor}:${POSTGRES_PASSWORD:-secure_password}@postgres:5432/${POSTGRES_DB:-knowledge_ingestor}
+      
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./configs:/app/configs
+      - worker_temp:/app/temp
+      - worker_cache:/app/cache
+    networks:
+      - knowledge-net
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: "0.8"
+        reservations:
+          memory: 512M
+          cpus: "0.2"
+
+  # =============================================================================
+  # Infrastructure Services
+  # =============================================================================
+  
+  # Redis for caching and job queues
+  redis:
+    image: redis:7.2-alpine
+    container_name: knowledge-ingestor-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+      - ./configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - knowledge-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.3"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+
+  # PostgreSQL for metadata and user management
+  postgres:
+    image: postgres:15-alpine
+    container_name: knowledge-ingestor-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-knowledge_ingestor}
+      - POSTGRES_USER=${POSTGRES_USER:-ingestor}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_password}
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./configs/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - knowledge-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ingestor} -d ${POSTGRES_DB:-knowledge_ingestor}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+          cpus: "0.2"
+
+  # =============================================================================
+  # Monitoring and Observability
+  # =============================================================================
+  
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: knowledge-ingestor-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_WEB_PORT:-9091}:9090"
+    networks:
+      - knowledge-net
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.3"
+
+  # Grafana for monitoring dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: knowledge-ingestor-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    networks:
+      - knowledge-net
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.2"
+
+  # =============================================================================
+  # Reverse Proxy and Load Balancing
+  # =============================================================================
+  
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: knowledge-ingestor-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - knowledge-net
+    depends_on:
+      - api
+    profiles:
+      - production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
+
+  # =============================================================================
+  # Utility Services
+  # =============================================================================
+  
+  # Database backup service
+  backup:
+    image: postgres:15-alpine
+    container_name: knowledge-ingestor-backup
+    restart: "no"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-knowledge_ingestor}
+      - POSTGRES_USER=${POSTGRES_USER:-ingestor}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_password}
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}  # Daily at 2 AM
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    networks:
+      - knowledge-net
+    depends_on:
+      - postgres
+    profiles:
+      - backup
+    command: ["/usr/local/bin/backup.sh"]
+
+# =============================================================================
+# Volumes for persistent data
+# =============================================================================
+volumes:
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/redis
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/postgres
+  prometheus_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/prometheus
+  grafana_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/grafana
+  nginx_cache:
+    driver: local
+  api_temp:
+    driver: local
+  api_cache:
+    driver: local
+  worker_temp:
+    driver: local
+  worker_cache:
+    driver: local
+
+# =============================================================================
+# Networks for service isolation
+# =============================================================================
+networks:
+  knowledge-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+      driver: default
+    driver_opts:
+      com.docker.network.bridge.name: knowledge-br0

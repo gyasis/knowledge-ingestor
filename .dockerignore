@@ -1,0 +1,343 @@
+# Knowledge Ingestor - Docker Build Context Optimization
+# This file excludes unnecessary files from the Docker build context to improve build speed and reduce image size
+
+# =============================================================================
+# Version Control
+# =============================================================================
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# =============================================================================
+# Python Runtime & Build Artifacts  
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# =============================================================================
+# Virtual Environments & Package Managers
+# =============================================================================
+.venv/
+venv/
+ENV/
+env/
+.env.local
+.env.*.local
+pip-log.txt
+pip-delete-this-directory.txt
+.Python
+.pyenv
+.python-version
+
+# UV package manager (keep uv.lock, exclude generated files)
+.uv/
+uv-cache/
+
+# =============================================================================
+# Testing & Coverage
+# =============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+junit.xml
+test-results/
+test-output*/
+.pytest/
+
+# =============================================================================
+# IDE & Editor Files
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Jupyter Notebook
+.ipynb_checkpoints
+notebooks/.ipynb_checkpoints/
+*.ipynb
+
+# Vim
+*.un~
+Session.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.directory
+.fuse_hidden*
+
+# =============================================================================
+# Logs & Temporary Files
+# =============================================================================
+*.log
+*.pid
+*.seed
+*.lock
+*.tmp
+*.temp
+logs/
+log/
+tmp/
+temp/
+
+# Application specific logs
+ingest_log_*.log
+api.log
+worker.log
+*-dev.log
+
+# =============================================================================
+# Data & Runtime Directories (mounted as volumes)
+# =============================================================================
+data/
+volumes/
+backups/
+cache/
+
+# =============================================================================
+# Configuration Files (mounted separately)
+# =============================================================================
+.env
+.env.production
+.env.development
+.env.staging
+.env.test
+
+# SSL certificates (mounted as secrets)
+ssl/
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# =============================================================================
+# Docker & Container Files
+# =============================================================================
+Dockerfile*
+!Dockerfile
+docker-compose*.yml
+.dockerignore
+*.dockerfile
+
+# =============================================================================
+# Documentation & Development Files
+# =============================================================================
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+*.md
+*.rst
+*.txt
+!requirements.txt
+
+# Exclude markdown files except essential ones
+*.md
+!README.md
+
+# =============================================================================
+# Legacy & Archive Files
+# =============================================================================
+src/legacy_*
+archive/
+old/
+backup/
+*.bak
+*.old
+
+# =============================================================================
+# Node.js & Frontend Assets (if any)
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+package-lock.json
+yarn.lock
+
+# =============================================================================
+# Database Files (mounted as volumes)
+# =============================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+postgres-data/
+redis-data/
+deeplake_dataset/
+*.h5
+*.npz
+
+# =============================================================================
+# Monitoring & Metrics
+# =============================================================================
+monitoring/
+grafana-data/
+prometheus-data/
+
+# =============================================================================
+# Cloud Provider Files
+# =============================================================================
+.aws/
+.gcp/
+.azure/
+terraform/
+*.tf
+*.tfstate
+*.tfvars
+
+# =============================================================================
+# Security & Secrets
+# =============================================================================
+secrets/
+*.secret
+*.key
+api-keys.txt
+service-account.json
+credentials.json
+
+# =============================================================================
+# Development & Testing Tools
+# =============================================================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.bandit
+.safety
+.pre-commit-config.yaml
+pyrightconfig.json
+mypy.ini
+setup.cfg
+tox.ini
+
+# =============================================================================
+# Build Tools & CI/CD
+# =============================================================================
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+azure-pipelines.yml
+Jenkinsfile
+.buildkite/
+
+# =============================================================================
+# Profiling & Performance
+# =============================================================================
+.prof
+*.prof
+*.profile
+
+# =============================================================================
+# ML/AI Model Files (large files that should be downloaded)
+# =============================================================================
+*.model
+*.pkl
+*.joblib
+models/
+checkpoints/
+
+# =============================================================================
+# Jupyter & Scientific Computing
+# =============================================================================
+.jupyter/
+jupyter_config/
+.ipython/
+
+# =============================================================================
+# Application Specific
+# =============================================================================
+
+# Test databases and datasets
+test_deeplake_dataset/
+*_test.db
+
+# Temporary processing files
+processing_temp/
+upload_temp/
+
+# Generated reports
+reports/
+output/
+
+# Local development scripts
+dev-scripts/
+local/
+
+# Nginx logs (when running locally)
+nginx/logs/
+access.log
+error.log
+
+# =============================================================================
+# Keep Essential Files (whitelist important files that might be excluded)
+# =============================================================================
+
+# Always include these files
+!pyproject.toml
+!uv.lock
+!requirements.txt
+!src/
+!configs/
+!scripts/setup.sh
+
+# Include specific config files needed for runtime
+!nginx/nginx.conf
+!nginx/conf.d/
+!monitoring/prometheus/prometheus.yml
+!monitoring/grafana/provisioning/
