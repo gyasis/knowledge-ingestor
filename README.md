@@ -254,6 +254,14 @@ Once the server is running, visit `http://localhost:8000/docs` for interactive A
 - `GET /health` - System health check
 - `GET /stats` - System statistics
 
+## Recent Updates
+
+### Browser Safety Fix (Latest)
+- Fixed aggressive browser process management in legacy scrapers
+- No more system-wide Chrome/Chromium crashes when processing webpages
+- Added selective process cleanup with graceful termination
+- See `BROWSER_SAFETY_FIX.md` for technical details
+
 ## Troubleshooting
 
 ### Common Issues
@@ -272,6 +280,11 @@ Once the server is running, visit `http://localhost:8000/docs` for interactive A
    - Check source accessibility
    - Verify API keys for external services
    - Review ingestor-specific requirements
+
+4. **Browser Process Issues**
+   - If you experience browser crashes during web scraping, the system includes browser safety fixes
+   - Legacy components use selective process management to avoid killing user browsers
+   - Requires `psutil` dependency for safe process handling
 
 ### Debug Mode
 
